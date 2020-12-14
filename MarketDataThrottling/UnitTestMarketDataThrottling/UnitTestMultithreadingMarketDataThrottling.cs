@@ -5,19 +5,31 @@ using System.Threading;
 using System.Threading.Tasks;
 using MarketDataAggregator.DomainModel;
 using System;
+using MarketDataThrottling.Contracts;
 
 namespace UnitTestMarketDataThrottling
 {
     [TestClass]
     public class UnitTestMultithreadingMarketDataThrottling
     {
-        private static ThrottledMarketDataStream _stream = new ThrottledMarketDataStream();
+        private static void ThreadMethodAddWatcher(Client c, IThrottledMarketDataStream stream)
+        {
+            stream.AddWatcher(c);
+            System.Diagnostics.Debug.WriteLine("Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
+        }
 
-        private void ThrottledMarketDataStreamMultithreadingAddWatchers(List<Client> list)
+        private static void ThreadMethodRemoveWatcher(Client c, IThrottledMarketDataStream stream)
+        {
+            stream.RemoveWatcher(c);
+
+            System.Diagnostics.Debug.WriteLine("Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
+        }
+
+        private void ThrottledMarketDataStreamMultithreadingAddWatchers(List<Client> list, IThrottledMarketDataStream stream)
         {
             // create a bunch of threads
             List<Thread> threads = new List<Thread>();
-            list.ForEach(x => threads.Add(new Thread(() => ThreadMethodAddWatcher(x))));
+            list.ForEach(x => threads.Add(new Thread(() => ThreadMethodAddWatcher(x, stream))));
 
             // start them
             threads.ForEach(x => x.Start());
@@ -29,40 +41,31 @@ namespace UnitTestMarketDataThrottling
         [TestMethod]
         public void ThrottledMarketDataStreamMultithreadingAddWatcherTest()
         {
+            var stream = new ThrottledMarketDataStream();
             List<Client> list = new List<Client>();
             list.AddRange(new Client[] { new Client(), new Client(), new Client(), new Client(), new Client() });
 
-            ThrottledMarketDataStreamMultithreadingAddWatchers(list);
+            ThrottledMarketDataStreamMultithreadingAddWatchers(list, stream);
             // this will not print untill all threads have completed
             System.Diagnostics.Debug.WriteLine("All threads finished.");
-            Assert.IsTrue(_stream.WatcherCount == 5);
+            Assert.IsTrue(stream.WatcherCount == 5);
         }
 
-        private static void ThreadMethodAddWatcher(Client c)
-        {
-            _stream.AddWatcher(c);
-            System.Diagnostics.Debug.WriteLine("Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
-        }
-
-        private static void ThreadMethodRemoveWatcher(Client c)
-        {
-            _stream.RemoveWatcher(c);
-
-            System.Diagnostics.Debug.WriteLine("Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
-        }
+        
 
         [TestMethod]
         public void ThrottledMarketDataStreamMultithreadingRemoveWatcherTest()
         {
+            var stream = new ThrottledMarketDataStream();
             List<Client> list = new List<Client>();
             list.AddRange(new Client[] { new Client(), new Client(), new Client(), new Client(), new Client(), new Client(), new Client(), new Client(), null });
 
-            ThrottledMarketDataStreamMultithreadingAddWatchers(list);
-            Assert.IsTrue(_stream.WatcherCount == 9);
+            ThrottledMarketDataStreamMultithreadingAddWatchers(list, stream);
+            Assert.IsTrue(stream.WatcherCount == 9);
 
             // create a bunch of threads
             List<Thread> threads = new List<Thread>();
-            list.ForEach(x => threads.Add(new Thread(() => ThreadMethodRemoveWatcher(x))));
+            list.ForEach(x => threads.Add(new Thread(() => ThreadMethodRemoveWatcher(x, stream))));
 
             // start them
             threads.ForEach(x => x.Start());
@@ -72,21 +75,22 @@ namespace UnitTestMarketDataThrottling
 
             // this will not print untill all threads have completed
             System.Diagnostics.Debug.WriteLine("All threads finished.");
-            Thread.Sleep(100);
-            System.Diagnostics.Debug.WriteLine($"WatcherCount - {_stream.WatcherCount}");
-            Assert.IsTrue(_stream.WatcherCount == 0);
+            System.Diagnostics.Debug.WriteLine($"WatcherCount - {stream.WatcherCount}");
+            Assert.IsTrue(stream.WatcherCount == 0);
         }
 
-        private static async Task ThreadMethodAddWatcherAync(Client c)
+        private static async Task ThreadMethodAddWatcherAync(Client c, IThrottledMarketDataStream stream)
         {
             await Task.CompletedTask;
-            _stream.AddWatcher(c);
+            stream.AddWatcher(c);
             System.Diagnostics.Debug.WriteLine("ThreadMethodAddWatcherAync Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
         }
 
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingAddWatcherAyncTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             List<Client> list = new List<Client>();
             var tasks = new List<Task>();
 
@@ -94,41 +98,7 @@ namespace UnitTestMarketDataThrottling
             {
                 var currentClient = new Client();
                 list.Add(currentClient);
-                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient)));
-            }
-
-            Parallel.ForEach(tasks, task =>
-            {
-                task.Start();
-            });
-
-            Task.WhenAll(tasks).ContinueWith(done =>
-            {
-                // this will not print untill all tasks have completed.
-                System.Diagnostics.Debug.WriteLine("All tasks add watcher finished.");
-            });
-            Thread.Sleep(1000);
-            Assert.IsTrue(_stream.WatcherCount == 100);
-        }
-
-        private static async Task ThreadMethodRemoveWatcherAync(Client c)
-        {
-            await Task.CompletedTask;
-            _stream.RemoveWatcher(c);
-            System.Diagnostics.Debug.WriteLine("ThreadMethodRemoveWatcherAync Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
-        }
-
-        [TestMethod]
-        public void ThrottledMarketDataStreamTasksMultithreadingAddRemoveWatcherAyncTest()
-        {
-            List<Client> list = new List<Client>();
-            var tasks = new List<Task>();
-
-            for (int i = 0; i < 100; i++)
-            {
-                var currentClient = new Client();
-                list.Add(currentClient);
-                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient)));
+                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient, stream)));
             }
 
             Parallel.ForEach(tasks, task =>
@@ -143,11 +113,48 @@ namespace UnitTestMarketDataThrottling
             });
 
             Thread.Sleep(100);
-            Assert.IsTrue(_stream.WatcherCount == 100);
+            Assert.IsTrue(stream.WatcherCount == 100);
+        }
+
+        private static async Task ThreadMethodRemoveWatcherAync(Client c, IThrottledMarketDataStream stream)
+        {
+            await Task.CompletedTask;
+            stream.RemoveWatcher(c);
+            System.Diagnostics.Debug.WriteLine("ThreadMethodRemoveWatcherAync Thread ManagedThreadId : {0}", Thread.CurrentThread.ManagedThreadId);
+        }
+
+        [TestMethod]
+        public void ThrottledMarketDataStreamTasksMultithreadingAddRemoveWatcherAyncTest()
+        {
+            var stream = new ThrottledMarketDataStream();
+
+            List<Client> list = new List<Client>();
+            var tasks = new List<Task>();
+
+            for (int i = 0; i < 100; i++)
+            {
+                var currentClient = new Client();
+                list.Add(currentClient);
+                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient, stream)));
+            }
+
+            Parallel.ForEach(tasks, task =>
+            {
+                task.Start();
+            });
+
+            Task.WhenAll(tasks).ContinueWith(done =>
+            {
+                // this will not print untill all tasks have completed.
+                System.Diagnostics.Debug.WriteLine("All tasks add watcher finished.");
+            });
+
+            Thread.Sleep(100);
+            Assert.IsTrue(stream.WatcherCount == 100);
 
             tasks.Clear();
 
-            list.ForEach(c => tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(c))));
+            list.ForEach(c => tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(c, stream))));
 
             Parallel.ForEach(tasks, task =>
             {
@@ -159,13 +166,16 @@ namespace UnitTestMarketDataThrottling
                 // this will not print untill all tasks have completed.
                 System.Diagnostics.Debug.WriteLine("All tasks remove watcher finished.");
             });
-            Thread.Sleep(1000);
-            Assert.IsTrue(_stream.WatcherCount == 0);
+
+            Thread.Sleep(100);
+            Assert.IsTrue(stream.WatcherCount == 0);
         }
 
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingCombinedAddRemoveWatcherTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             List<Client> list = new List<Client>();
             var tasks = new List<Task>();
 
@@ -173,7 +183,7 @@ namespace UnitTestMarketDataThrottling
             {
                 var currentClient = new Client();
                 list.Add(currentClient);
-                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient)));
+                tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(currentClient, stream)));
             }
 
             Parallel.ForEach(tasks, task =>
@@ -186,8 +196,9 @@ namespace UnitTestMarketDataThrottling
                 // this will not print untill all tasks have completed.
                 System.Diagnostics.Debug.WriteLine("All tasks add watcher finished.");
             });
+
             Thread.Sleep(100);
-            Assert.IsTrue(_stream.WatcherCount == 100);
+            Assert.IsTrue(stream.WatcherCount == 100);
 
             tasks.Clear();
 
@@ -195,15 +206,15 @@ namespace UnitTestMarketDataThrottling
             {
                 if( i%2 ==0 )
                 {
-                    tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(new Client())));
+                    tasks.Add(new Task(async () => await ThreadMethodAddWatcherAync(new Client(), stream)));
                 }
                 else
                 {
-                    tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(list[i])));
+                    tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(list[i], stream)));
                 }
             }
 
-            list.ForEach(c => tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(c))));
+            list.ForEach(c => tasks.Add(new Task(async () => await ThreadMethodRemoveWatcherAync(c, stream))));
 
             Parallel.ForEach(tasks, task =>
             {
@@ -217,12 +228,14 @@ namespace UnitTestMarketDataThrottling
             });
 
             Thread.Sleep(100);
-            Assert.IsTrue(_stream.WatcherCount == 50);
+            Assert.IsTrue(stream.WatcherCount == 50);
         }
 
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingOnUpdateTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             var randomizer = new Random(new Random().Next(1, int.MaxValue));
             var tasks = new List<Task>();
 
@@ -241,7 +254,7 @@ namespace UnitTestMarketDataThrottling
                         update.Fields[(byte)randomizer.Next(1, 20)] = randomizer.Next(1, 10000);
                     }
 
-                    _stream.OnUpdate(update);
+                    stream.OnUpdate(update);
                 }));
             }
 
@@ -262,6 +275,8 @@ namespace UnitTestMarketDataThrottling
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingOnUpdateSecondTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             var randomizer = new Random(new Random().Next(1, int.MaxValue));
             var tasks = new List<Task>();
             List<MarketDataUpdate> list = new List<MarketDataUpdate>();
@@ -283,7 +298,7 @@ namespace UnitTestMarketDataThrottling
 
             for (int i = 0; i < list.Count - 1; i++)
             {
-                tasks.Add(new Task(() =>_stream.OnUpdate(list[i]) ));
+                tasks.Add(new Task(() =>stream.OnUpdate(list[i]) ));
             }
 
             Parallel.ForEach(tasks, task =>
@@ -301,11 +316,13 @@ namespace UnitTestMarketDataThrottling
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingStartTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             var tasks = new List<Task>();
 
             for (int i = 0; i < 100; i++)
             {
-                tasks.Add(new Task(() => _stream.Start()));
+                tasks.Add(new Task(() => stream.Start()));
             }
 
             Parallel.ForEach(tasks, task =>
@@ -317,7 +334,7 @@ namespace UnitTestMarketDataThrottling
             {
                 // this will not print untill all tasks have completed.
                 System.Diagnostics.Debug.WriteLine("All tasks _stream finished.");
-                _stream.End();
+                stream.End();
             });
         }
 
@@ -325,12 +342,14 @@ namespace UnitTestMarketDataThrottling
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingEndTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             var tasks = new List<Task>();
-            _stream.Start();
+            stream.Start();
 
             for (int i = 0; i < 10; i++)
             {
-                tasks.Add(new Task(() => _stream.End()));
+                tasks.Add(new Task(() => stream.End()));
             }
 
             Parallel.ForEach(tasks, task =>
@@ -348,23 +367,26 @@ namespace UnitTestMarketDataThrottling
         [TestMethod]
         public void ThrottledMarketDataStreamOnUpdateNullIgnore()
         {
-            _stream.OnUpdate(null);
+            var stream = new ThrottledMarketDataStream();
+            stream.OnUpdate(null);
         }
 
         [TestMethod]
         public void ThrottledMarketDataStreamTasksMultithreadingStartStopTest()
         {
+            var stream = new ThrottledMarketDataStream();
+
             var tasks = new List<Task>();
 
             for (int i = 0; i < 10; i++)
             {
                 if (i % 2 == 0)
                 {
-                    tasks.Add(new Task(() => _stream.Start()));
+                    tasks.Add(new Task(() => stream.Start()));
                 }
                 else
                 {
-                    tasks.Add(new Task(() => _stream.End()));
+                    tasks.Add(new Task(() => stream.End()));
                 }
             }
 
@@ -377,7 +399,7 @@ namespace UnitTestMarketDataThrottling
             {
                 // this will not print untill all tasks have completed.
                 System.Diagnostics.Debug.WriteLine("All tasks _stream Start/End  finished.");
-                _stream.End();
+                stream.End();
             });
         }
     }
