@@ -73,6 +73,7 @@ namespace MarketDataAggregator
                 stream1.End();
                 stream2.End();
 
+                Thread.Sleep(1000);
                 Console.WriteLine("Press Enter to exit.");
                 Console.ReadLine();
             }

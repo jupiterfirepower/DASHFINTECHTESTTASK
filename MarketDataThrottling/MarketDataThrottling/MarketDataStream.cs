@@ -31,6 +31,7 @@ namespace MarketDataAggregator
 
         private readonly object _locker = new object();
         private readonly object _lockerAggregator = new object();
+
         private DataAggregator aggregator => _aggregator.Value;
 
         public int WatcherCount => _watchers.Count;
@@ -102,8 +103,9 @@ namespace MarketDataAggregator
                         _observers.ForEach(o => o.OnError(ex));
                     }
                 }
-
+                
                 _observers.ForEach(o => o.OnCompleted());
+                Console.WriteLine("Generating market data stream task canceled.");
 
             }, cancellationToken);
 
@@ -196,7 +198,7 @@ namespace MarketDataAggregator
 
             for(int i = 0; i < _watchers.Count; i++ )
             {
-                _subscribers.Add(new Subscriber(publisher, i.ToString(), _watchers[i]));
+                _subscribers.Add(new Subscriber(publisher, $"Source{i}", _watchers[i]));
             }
         }
 
