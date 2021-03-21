@@ -10,3 +10,11 @@ https://www.dashfinancial.com/<br>
 TPL Dataflow создает «замкнутую сеть» («mesh»).<br> 
 Rx — более мощное и эффективное решение, но труднее в изучении.<br> 
 Как TPL Dataflow, так и Rx имеют методы с поддержкой async (async-ready), и хорошо работают с асинхронным кодом.<br>
+
+```diff
+- text in red
++ text in green
+! text in orange
+# text in gray
+@@ text in purple (and bold)@@
+```
